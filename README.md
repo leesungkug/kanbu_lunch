@@ -14,7 +14,7 @@ The old internal API client is retained for regression coverage, but the notifie
 
 The updated CLI successfully retrieved public post `DdGPb7EzO7R` in a local anonymous Chromium dry-run. Its publication date is September 9; the image contains the September 11 menu. No Slack message was sent and the existing state file was unchanged.
 
-These changes are local and have not been deployed. The GitHub account available during this repair has repository read access (`pull: true`, `push: false`), so a repository writer must apply the changes to `main` and run the workflow with `dry_run` enabled to verify retrieval on GitHub's runner. This user-account permission is separate from the workflow's `contents: write` permission used to save state. Hosted browser retrieval remains unverified.
+The code is deployed to `leesungkug/kanbu_lunch` on `main` as of 2026-09-21, and both workflows are active. [Code tests passed on GitHub Actions](https://github.com/leesungkug/kanbu_lunch/actions/runs/35569757019). However, the [hosted Chromium dry-run](https://github.com/leesungkug/kanbu_lunch/actions/runs/35569771406) received HTTP 429 from the public Instagram profile. Browser installation succeeded; retrieval failed before any Slack delivery or state change. This does not establish a permanent IP ban. Registering a Slack webhook alone will not resolve this retrieval failure. A future successful hosted dry-run is required before considering automated delivery operational.
 
 ## Files
 
@@ -28,18 +28,24 @@ These changes are local and have not been deployed. The GitHub account available
 
 ## Trigger setup
 
-1. Open the repository on GitHub
-2. Go to `Settings` -> `Secrets and variables` -> `Actions`
-3. Add a new repository secret named `SLACK_WEBHOOK_URL`
-4. Paste your Slack Incoming Webhook URL
-5. Create a GitHub fine-grained personal access token for this repository with `Contents: Write`
-6. In `cron-job.org`, create a daily job that sends a `POST` request to:
+1. In [Slack app management](https://api.slack.com/apps), create or select an app for your workspace.
+2. Enable `Incoming Webhooks`, choose `Add New Webhook to Workspace`, and select the destination channel. Copy its webhook URL. See the [Slack guide](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/).
+3. Open this repository's [Actions secrets](https://github.com/leesungkug/kanbu_lunch/settings/secrets/actions) and choose `New repository secret`.
+4. Set the name to `SLACK_WEBHOOK_URL` and the value to the webhook URL. Keep the URL out of source files and chat messages.
+5. Open [Instagram Slack Notifier](https://github.com/leesungkug/kanbu_lunch/actions/workflows/instagram-slack-notifier.yml), select `Run workflow` on `main`, and keep `dry_run` checked to verify retrieval without sending.
+6. After a successful dry-run, an explicit manual Slack test uses `dry_run` unchecked and `force_notify` checked. This sends one real message to the webhook's channel.
+
+The built-in Actions schedule needs no personal access token or external scheduler. As of setup, no Slack webhook secret has been registered. The hosted retrieval failure above must also be resolved before delivery works.
+
+### Optional external scheduler
+
+For an additional trigger, create a GitHub fine-grained personal access token for this repository with `Contents: Write`. In `cron-job.org`, create a daily job that sends a `POST` request to:
 
 ```text
-https://api.github.com/repos/hangyeollim-conpa/kanbu_lunch/dispatches
+https://api.github.com/repos/leesungkug/kanbu_lunch/dispatches
 ```
 
-7. Use these headers in `cron-job.org`:
+Use these headers in `cron-job.org`:
 
 ```text
 Accept: application/vnd.github+json
@@ -48,7 +54,7 @@ Content-Type: application/json
 X-GitHub-Api-Version: 2026-03-10
 ```
 
-8. Use this JSON request body:
+Use this JSON request body:
 
 ```json
 {"event_type":"instagram-slack-notifier"}
