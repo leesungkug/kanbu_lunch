@@ -52,12 +52,14 @@ jobs:
         run: uv sync --locked --no-dev
 
       - name: Install Chromium
+        if: vars.INSTAGRAM_SOURCE != 'apify'
         run: uv run --no-dev playwright install --with-deps chromium
 
       - name: Create runtime config
         shell: bash
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          INSTAGRAM_SOURCE: ${{ vars.INSTAGRAM_SOURCE || 'browser' }}
         run: |
           umask 077
           python - <<'PY'
@@ -66,6 +68,7 @@ jobs:
           from pathlib import Path
 
           config = {
+              "instagram_source": os.environ.get("INSTAGRAM_SOURCE", "browser"),
               "instagram_username": "lunch11_14",
               "instagram_profile_url": "https://www.instagram.com/lunch11_14/",
               "slack_webhook_url": os.environ["SLACK_WEBHOOK_URL"],
@@ -79,6 +82,7 @@ jobs:
       - name: Run notifier
         shell: bash
         env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           DRY_RUN: ${{ inputs.dry_run }}
           FORCE_NOTIFY: ${{ inputs.force_notify }}

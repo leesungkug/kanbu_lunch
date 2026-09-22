@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from instagram_apify import fetch_latest_public_post as fetch_latest_apify_post
 from instagram_browser import fetch_latest_public_post
 from instagram_client import Post
+from instagram_public import PublicProfileError
 
 DEFAULT_CONFIG_NAME = "config.json"
 DEFAULT_STATE_NAME = ".instagram_state.json"
@@ -198,7 +200,13 @@ def main() -> int:
             return 0
 
     try:
-        post = fetch_latest_public_post(username)
+        match config.get("instagram_source", "browser"):
+            case "browser":
+                post = fetch_latest_public_post(username)
+            case "apify":
+                post = fetch_latest_apify_post(username)
+            case _:
+                raise PublicProfileError("Unknown instagram_source; expected browser or apify.")
     except (KeyError, urllib.error.URLError, json.JSONDecodeError, RuntimeError) as exc:
         print(f"Failed to fetch Instagram profile: {exc}", file=sys.stderr)
         return 1
@@ -252,6 +260,21 @@ def main() -> int:
     if previous_post_id == post.post_id or previous_shortcode == post.shortcode:
         print("No new Instagram post found. Later scheduled checks can still send an update.")
         return 0
+
+    previous_timestamp = state.get("last_notified_timestamp", state.get("last_seen_timestamp"))
+    if previous_timestamp is not None:
+        previous_precision = state.get("last_notified_timestamp_precision", "second")
+        if (
+            type(previous_timestamp) is not int
+            or post.timestamp <= previous_timestamp
+            or (previous_precision == "day" and post.timestamp < previous_timestamp + 86400)
+        ):
+            print(
+                "MATCHING FAILED: candidate is not provably newer than the previous delivery; "
+                "Slack and state unchanged.",
+                file=sys.stderr,
+            )
+            return 1
 
     if previous_post_id is None and not notify_on_first_run:
         save_state(
