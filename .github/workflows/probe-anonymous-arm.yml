@@ -1,0 +1,27 @@
+name: Probe anonymous Instagram on ARM
+
+on:
+  push:
+    branches: [codex/probe-anonymous-arm]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Install locked runtime and Chromium
+        run: |
+          uv sync --locked --no-dev
+          uv run --locked --no-dev playwright install --with-deps chromium
+      - name: Read public profile once without Slack or state writes
+        run: uv run --locked --no-dev python instagram_slack_notifier.py --config config.example.json --dry-run
