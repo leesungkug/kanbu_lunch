@@ -102,7 +102,8 @@ def test_all_notifier_events_serialize_before_checkout() -> None:
     assert scalar_value(mapping_value(concurrency, "cancel-in-progress")) == "false"
 
 
-def test_config_keeps_secret_data_literal(tmp_path: Path) -> None:
+@pytest.mark.parametrize("source", ["browser", "apify"])
+def test_config_keeps_secret_data_literal(tmp_path: Path, source: str) -> None:
     # Given a secret containing JSON-sensitive characters and shell syntax.
     marker = tmp_path / "unexpected-shell-execution"
     secret = f'https://example.invalid/"\\\n$(touch {marker})'
@@ -118,6 +119,7 @@ def test_config_keeps_secret_data_literal(tmp_path: Path) -> None:
             "RUNNER_TEMP": str(tmp_path),
             "GITHUB_WORKSPACE": str(tmp_path),
             "SLACK_WEBHOOK_URL": secret,
+            "INSTAGRAM_SOURCE": source,
         },
         capture_output=True,
         text=True,
@@ -128,6 +130,7 @@ def test_config_keeps_secret_data_literal(tmp_path: Path) -> None:
     assert not marker.exists()
     config = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
     assert config["slack_webhook_url"] == secret
+    assert config["instagram_source"] == source
     assert config["state_file"] == str(tmp_path / ".instagram_state.json")
 
 

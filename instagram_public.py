@@ -69,8 +69,25 @@ def _parse_tile(username: str, tile: PublicTile) -> Post:
     except ValueError as exc:
         raise PublicProfileError("Public post publication date is invalid.") from exc
 
+    validate_image_url(tile.image_url)
+
+    shortcode = permalink["shortcode"]
+    return Post(
+        post_id=shortcode,
+        shortcode=shortcode,
+        permalink=f"https://www.instagram.com/p/{shortcode}/",
+        timestamp=int(publication_day.timestamp()),
+        caption=tile.description.strip(),
+        display_url=tile.image_url,
+        is_pinned=None,
+        timestamp_precision="day",
+    )
+
+
+def validate_image_url(image_url: str) -> None:
+    """Reject image URLs outside Instagram HTTPS CDN hosts."""
     try:
-        image = urlsplit(tile.image_url)
+        image = urlsplit(image_url)
         host = image.hostname or ""
         trusted_host = any(
             host == suffix or host.endswith(f".{suffix}")
@@ -84,24 +101,13 @@ def _parse_tile(username: str, tile: PublicTile) -> Post:
             and image.port in (None, 443)
             and not image.fragment
             and bool(image.path)
-            and not any(character.isspace() or ord(character) < 32 for character in tile.image_url)
+            and not any(character.isspace() or ord(character) < 32 for character in image_url)
         )
     except ValueError as exc:
         raise PublicProfileError("Public post image URL is invalid.") from exc
     if not safe_image:
         raise PublicProfileError("Public post image URL is not a trusted HTTPS Instagram CDN URL.")
 
-    shortcode = permalink["shortcode"]
-    return Post(
-        post_id=shortcode,
-        shortcode=shortcode,
-        permalink=f"https://www.instagram.com/p/{shortcode}/",
-        timestamp=int(publication_day.timestamp()),
-        caption=tile.description.strip(),
-        display_url=tile.image_url,
-        is_pinned=None,
-        timestamp_precision="day",
-    )
 
 
 def select_latest_public_post(username: str, serialized_tiles: str) -> Post:
