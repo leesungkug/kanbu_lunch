@@ -23,10 +23,16 @@ To enable the cloud source after deploying this change:
 4. Retain the existing weekday 10:43 KST external trigger. Verify the next
    scheduled delivery separately.
 
-Each Apify request asks for at most 12 public posts, with a $0.04 run charge limit,
+Each Apify request asks for one public profile and uses its `latestPosts`, with a $0.04 run charge limit,
 120-second actor timeout, and no automatic retry or source fallback. Free credits
 and other account usage must be checked in Apify; this repository does not upgrade
 plans or configure billing. See [Apify pricing](https://apify.com/pricing).
+
+Profile details retrieval avoids the separate posts-feed request affected by
+Apify's October 20, 2026 blocking incident. The profile must match the requested
+public account; every returned post still passes owner, URL, timestamp and image
+validation. The newest timestamp wins over pinned order. Empty or blocked results
+fail without sending Slack or updating notification state.
 No Instagram login or restaurant account access is required by this adapter.
 
 The default source remains `browser` until explicitly configured. Local config
