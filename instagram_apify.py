@@ -6,7 +6,7 @@ import re
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
-from typing import Final
+from typing import Final, Literal, NoReturn
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
@@ -35,11 +35,63 @@ class ScrapedPost(BaseModel):
 POSTS: Final = TypeAdapter(list[ScrapedPost])
 
 
+class BlockedCollection(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    error: Literal["no_items"]
+    url: str
+    input_url: str = Field(alias="inputUrl")
+    request_errors: list[str] = Field(alias="requestErrorMessages", min_length=1)
+
+
+BLOCKED_COLLECTIONS: Final = TypeAdapter(list[BlockedCollection])
+
+
+class ApifyBlockedError(PublicProfileError):
+    pass
+
+
+class ScrapedProfile(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    username: str
+    url: str
+    input_url: str = Field(alias="inputUrl")
+    private: Literal[False]
+    latest_posts: list[ScrapedPost] = Field(alias="latestPosts")
+
+
+PROFILES: Final = TypeAdapter(list[ScrapedProfile])
+
+
+def _raise_response_error(username: str, body: bytes) -> NoReturn:
+    try:
+        failures = BLOCKED_COLLECTIONS.validate_json(body)
+    except ValidationError:
+        raise PublicProfileError("MATCHING FAILED: invalid Apify post data.") from None
+    profile_url = f"https://www.instagram.com/{username}/"
+    if failures and all(
+        failure.url == failure.input_url == profile_url
+        and all(
+            message.startswith("Error: Request got blocked.") for message in failure.request_errors
+        )
+        for failure in failures
+    ):
+        raise ApifyBlockedError(
+            "Instagram blocked Apify collection; no posts were retrieved."
+        ) from None
+    raise PublicProfileError("MATCHING FAILED: invalid Apify post data.") from None
+
+
 def select_latest_apify_post(username: str, body: bytes) -> Post:
     try:
         items = POSTS.validate_json(body)
     except ValidationError:
-        raise PublicProfileError("MATCHING FAILED: invalid Apify post data.") from None
+        _raise_response_error(username, body)
+    return _select_latest_post(username, items)
+
+
+def _select_latest_post(username: str, items: list[ScrapedPost]) -> Post:
     if not items or len({item.shortcode for item in items}) != len(items):
         raise PublicProfileError("MATCHING FAILED: empty or duplicate Apify posts.")
     posts: list[Post] = []
@@ -93,8 +145,8 @@ def fetch_latest_public_post(username: str) -> Post:
         data=json.dumps(
             {
                 "directUrls": [f"https://www.instagram.com/{username}/"],
-                "resultsType": "posts",
-                "resultsLimit": 12,
+                "resultsType": "details",
+                "resultsLimit": 1,
             }
         ).encode(),
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -111,4 +163,15 @@ def fetch_latest_public_post(username: str) -> Post:
         raise PublicProfileError(
             "Apify connection failed; no retry or fallback attempted."
         ) from None
-    return select_latest_apify_post(username, body)
+    try:
+        profiles = PROFILES.validate_json(body)
+    except ValidationError:
+        _raise_response_error(username, body)
+    profile_url = f"https://www.instagram.com/{username}"
+    if len(profiles) != 1 or (
+        profiles[0].username.casefold() != username.casefold()
+        or profiles[0].url not in {profile_url, profile_url + "/"}
+        or profiles[0].input_url != profile_url + "/"
+    ):
+        raise PublicProfileError("MATCHING FAILED: Apify returned an unexpected profile.")
+    return _select_latest_post(username, profiles[0].latest_posts)

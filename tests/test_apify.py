@@ -83,7 +83,7 @@ def test_request_has_bounded_cost_no_token_in_url_and_no_retry(monkeypatch):
         assert "timeout=120" in request.full_url
         assert "test-token" not in request.full_url
         assert request.get_header("Authorization") == "Bearer test-token"
-        assert json.loads(request.data)["resultsLimit"] == 12
+        assert json.loads(request.data)["resultsLimit"] == 1
 
 
 def test_regional_cdn_normalization_preserves_exact_signed_resource():
